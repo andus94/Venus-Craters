@@ -1,0 +1,325 @@
+---
+title: "Stats 102A Midterm"
+author: "Andus Kong"
+date: "Friday, November 13, 2015"
+output: html_document
+---
+
+1.
+
+a.
+
+Evaluating an expression has a set value that R internally represents. Expressions can be represented by a combo of explicit values, variables, operators, or functions. However, a function calls need to be invoked by name and takes in arguments which the function call then evaluates.
+
+b.
+
+The enclosing environment affects a function object because when a function call searches the assignment of the variable, but the variable is not defined in the function call, the function will search within the enclosing environment for the variable assignment.
+
+2.
+
+```{r}
+data <- read.delim(file = "http://www.lpi.usra.edu/venus/craters/rel3main.txt")
+# Clean Data
+column_names <- as.character(unlist(data[2,]))
+final_data <- data[3:nrow(data),]
+colnames(final_data) <- column_names
+```
+
+3.
+
+```{r}
+
+library("geosphere")
+######
+# Calculates Haversine Distance
+#
+# @param x: longitude/latitude of point(s). 
+#           Can be a vector of two numbers, a matrix of 2 columns
+# @param y: as above
+# @param r: Radius; default = 6051.8 km, radius of Venus
+# return:   Haversine Distance
+######
+dis <- function(x, y, r = 6051.8){
+  Haversine_d <- distHaversine(x, y, r)
+  return(Haversine_d)
+}
+```
+
+4.
+
+```{r,webgl=TRUE}
+library("sphereplot")
+# The following packages allow the output to be visible in an online browser
+library(knitr)
+library(rgl)
+knit_hooks$set(webgl = hook_webgl)
+
+longitude <- as.numeric(as.character(final_data$Lon))
+latitude <- as.numeric(as.character(final_data$Lat))
+radius <- rep(6051.8, length(longitude))
+coordinates <- cbind(longitude, latitude, radius)
+rgl.sphgrid(radius = 6051.8, radaxis = FALSE,deggap = 45, longtype = "D")
+# if you open in browser i.e. Google Chrome, you will see the plot
+rgl.sphpoints(long = coordinates) 
+
+```
+
+5.
+
+a.
+
+```{r}
+######
+# Calculates the weighted mean of the elevations
+#
+# @param point: a vector of two numbers - longitude and latitude
+# @param coordinates: Three column matrix - lon, lat, elevation respectively
+# @param R: Radius; default = 6051.8 km, radius of Venus    
+# @param kernel: Specifies the spatial kernel smoothing method;
+#                default is "Gaussian". Possible inputs:"Uniform","Epanechnikov"
+#                "Triangular"
+# @param b: bandwidth; default is 13000 for Venus elevation testing purposes
+# return: weighted mean of the elevations
+######
+Spatial_Kernel_Smoother <- function(point, coordinates, R = 6051.8, kernel = "Gaussian", b = 13000){
+  
+  no_elevation_coordinates <- coordinates[,1:2]
+  distance <- vector()
+  elevations <- coordinates[,3]
+  
+  # Create distance vector
+  for(i in 1:nrow(no_elevation_coordinates)){
+    
+     distance[i] <- dis(point, no_elevation_coordinates[i,], R)
+
+  }
+  
+  # Calculate Gaussian weights
+  if (kernel == "Gaussian"){
+    
+    weights <- vector()
+
+    for (i in 1:nrow(no_elevation_coordinates)){
+    
+      weights[i] <- exp(1) ^ (-distance[i]^2 / (2 * b^2))
+    }
+  }
+  
+  # Calculate Uniform weights
+  if (kernel == "Uniform"){
+    weights <- vector()
+    
+    for(i in 1:nrow(no_elevation_coordinates)){
+      if (distance[i] <= b){
+        weights[i] <- distance[i]
+      }
+      else{
+        weights[i] <- 0
+      }
+    }
+
+
+  }
+  # Calculate Epanechnikov weights
+  if (kernel == "Epanechnikov"){
+    weights <- vector()
+    
+    for(i in 1:nrow(no_elevation_coordinates)){
+      if (distance[i] <= b){
+      weights[i] <- ((b^2 - distance[i]^2) * distance[i])
+      }
+      else{
+      weights[i] <- 0
+      }
+    }
+  
+  }
+  
+  # Calculate Triangular weights
+  if (kernel == "Triangular"){
+    weights <- vector()
+    for(i in 1:nrow(no_elevation_coordinates)){
+      if (distance[i] <= b){
+      weights[i] <- ((b - distance[i]) * distance[i])
+      }
+      else{
+      weights[i] <- 0
+      }
+    }   
+  }
+  product <- sum(weights * elevations)
+  weighted_mean <- product / sum(weights)
+  return(weighted_mean)
+  
+}
+```
+
+b.
+
+```{r, warning = FALSE}
+# Create necessary dataframes
+elevations <- as.numeric(as.character(final_data$Ev))
+coordinates <- cbind(longitude, latitude, elevations)
+index <- which(!is.na(coordinates[,3]))
+missing_elevations <- coordinates[-index,]
+missing_elevations_coordinates <- missing_elevations[,1:2]
+coordinates <- coordinates[index,]
+
+# Run through every kernel method
+Gaus_elevations_estimates <- vector()
+for(i in 1:nrow(missing_elevations_coordinates)){
+  Gaus_elevations_estimates[i] <- Spatial_Kernel_Smoother(missing_elevations_coordinates[i,], coordinates, kernel = "Gaussian")
+}
+
+Epanc_elevations_estimates <- vector()
+for(i in 1:nrow(missing_elevations_coordinates)){
+  Epanc_elevations_estimates[i] <- Spatial_Kernel_Smoother(missing_elevations_coordinates[i,], coordinates, kernel = "Epanechnikov")
+}
+
+Tri_elevations_estimates <- vector()
+for(i in 1:nrow(missing_elevations_coordinates)){
+  Tri_elevations_estimates[i] <- Spatial_Kernel_Smoother(missing_elevations_coordinates[i,], coordinates, kernel = "Triangular")
+}
+
+Uni_elevations_estimates <- vector()
+for(i in 1:nrow(missing_elevations_coordinates)){
+  Uni_elevations_estimates[i] <- Spatial_Kernel_Smoother(missing_elevations_coordinates[i,], coordinates, kernel = "Uniform")
+}
+
+predicted <- data.frame(missing_elevations_coordinates,Gaus_elevations_estimates, Epanc_elevations_estimates, Tri_elevations_estimates, Uni_elevations_estimates)
+predicted
+```
+
+c.
+
+```{r, warning = FALSE}
+coordinates <- cbind(longitude, latitude)
+nearest_neighbor <- vector()
+# calculates nearest neighbor through min function
+for (i in 1:nrow(coordinates)){
+  
+  nearest_neighbor[i] <- min(dis(coordinates[i,], coordinates[-i,], r = 6051.8)) 
+                
+}
+
+hist(nearest_neighbor, xlab = "Nearest Neighbor in (km)", main = "Histogram of Nearest Neighbor")
+```
+
+6.
+
+a.
+
+```{r}
+######
+# Calculates Ripley's K function values
+#
+# @param spatial_points: matrix of longitude and latitude points
+# @param R: radius
+# @param Dm: vector of distances; default is the required vector in problem
+# returns: vector of Ripley's K function values
+######
+K_function <- function(spatial_points, R, Dm = seq(1,100) * pi * 6051.8 / 100){
+  # plyr parallelizes the respective matrix computations
+  require(plyr)
+  k_values <- vector()
+  n <- nrow(spatial_points)
+  distance <- list()
+  
+  constant <- (4 * pi * R^2) / (n * (n - 1))
+  
+  # Create list of lists of distances of each respective point
+  for(i in 1:n){
+    
+    distance[[i]] <- dis(spatial_points[i,], spatial_points[-i,], R)
+    
+  }
+  
+  # Find where distances are less than Dm
+  index <- list()
+  index <- lapply(Dm, FUN = function(x) distance[[i]] <= x)
+  summation <- lapply(index, sum)
+  summation <- unlist(summation)
+  
+  for (i in 2:n){
+    index <- lapply(Dm, FUN = function(x) distance[[i]] <= x)
+    temp <- lapply(index, sum)
+    x <- data.frame(summation, unlist(temp))
+    summation <- apply(x, 1, FUN = sum)
+  }
+  
+  summation <- constant * summation
+  return(summation)
+}
+```
+
+b.
+
+```{r, warning = FALSE}
+# Calculates and plots difference in Ripley's_K and CSR_K
+longitude <- as.numeric(as.character(final_data$Lon))
+latitude <- as.numeric(as.character(final_data$Lat))
+coordinates <- cbind(longitude, latitude)
+Dm = seq(1,100) * pi * 6051.8 / 100
+Ripleys_K <- K_function(coordinates, 6051.8)
+CSR_K <- (2 * pi * 6051.8^2) * (1- cos(Dm / 6051.8))
+library("ggplot2")
+  p1 <- ggplot() + geom_line(aes(Dm, Ripleys_K - CSR_K)) +
+    labs(title = "Spherical K function estimates for\ncraters on Venus", 
+       x = "Great Circle Distances (km)", 
+       y = "K - CSR")
+  print(p1)
+```
+
+7.
+
+```{r, warning = FALSE}
+######
+# Outputs Venus K Value difference plots and plots upper and lower bound for each dm
+#
+# @param Ripleys_K: Calculated K values for Venus spatial points
+# @param n: Amount of times to simulate distribution; default 100
+# @ return: Outputs the plot of the lb and ub of each dm
+######
+Uniform_Venus <- function(Ripleys_K, n = 100){
+
+  R <- vector()
+  lon <- vector()
+  lat <- vector()
+  Sample_K <- matrix(nrow = 100, ncol = n)
+
+  # Generate Uniform Distributions
+  for (i in 1:n){
+    R <- runif(942, min = -6051.8, max = 6051.8)
+    lon <- runif(942, min = 0, max = 360)
+    lat <- asin(R / 6051.8) * 180 / pi
+    coordinates <- data.frame(lon,lat)
+    Sample_K[,i] <- K_function(coordinates, 6051.8)  
+  }
+  # Build dataframe
+  bounds <- apply(Sample_K, MARGIN = 1,FUN = function(x) quantile(x, c(0.05,0.95)))
+  lb <- bounds[1,]
+  ub <- bounds[2,]
+  Dm = seq(1,100) * pi * 6051.8 / 100
+  CSR_K <- (2 * pi * 6051.8^2) * (1- cos(Dm / 6051.8))
+  # Plot lower and upper bounds for each dm
+  # plot(1:100, Ripleys_K - CSR_K, xlab = "1:100", main = "Ripleys_K - CSR_K for Elevation of Craters on Venus")
+  #for (i in 1:100){
+    #abline(h = lb[i] - CSR_K)
+    #abline(h = ub[i] - CSR_K)
+  
+  #}
+  p1 <- ggplot() + geom_line(aes(Dm, Ripleys_K - CSR_K)) +
+    geom_ribbon(aes(x = Dm, ymin = lb - CSR_K, ymax = ub - CSR_K), alpha = 0.2) +
+    labs(title = "Spherical K function estimates for\ncraters on Venus", 
+       x = "Great Circle Distances (km)", 
+       y = "K - CSR")
+  print(p1)
+}
+
+# For performance purposes, I used 5 to demonstrate the ability of the
+# function to plot the lb and ub for each dm.
+# Inputting 100 into n will allow for 100 samples
+Uniform_Venus(Ripleys_K, n = 5)
+```
+
+I conclude that the craters on Venus are randomly distributed in a uniform distribution across Venus. The actual sample k values did not differ too far from the upper and lower bound. Also the uniformly simulated graph closely resembles the actual graph of data gathered from Venus. 
