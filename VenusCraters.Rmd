@@ -1,10 +1,10 @@
 ---
-title: "Stats 102A Midterm"
+title: "Venus Craters"
 author: "Andus Kong"
 date: "Friday, November 13, 2015"
 output: html_document
 ---
-2.
+1.
 
 ```{r}
 data <- read.delim(file = "http://www.lpi.usra.edu/venus/craters/rel3main.txt")
@@ -14,27 +14,27 @@ final_data <- data[3:nrow(data),]
 colnames(final_data) <- column_names
 ```
 
-3.
+2.
 
 ```{r}
-
 library("geosphere")
+VenusR <- 6051.8
 ######
 # Calculates Haversine Distance
 #
 # @param x: longitude/latitude of point(s). 
 #           Can be a vector of two numbers, a matrix of 2 columns
 # @param y: as above
-# @param r: Radius; default = 6051.8 km, radius of Venus
+# @param r: Radius; default = VenusR or 6051.8 km: radius of Venus
 # return:   Haversine Distance
 ######
-dis <- function(x, y, r = 6051.8){
+dis <- function(x, y, r = VenusR){
   Haversine_d <- distHaversine(x, y, r)
   return(Haversine_d)
 }
 ```
 
-4.
+3.
 
 ```{r,webgl=TRUE}
 library("sphereplot")
@@ -45,15 +45,15 @@ knit_hooks$set(webgl = hook_webgl)
 
 longitude <- as.numeric(as.character(final_data$Lon))
 latitude <- as.numeric(as.character(final_data$Lat))
-radius <- rep(6051.8, length(longitude))
+radius <- rep(VenusR, length(longitude))
 coordinates <- cbind(longitude, latitude, radius)
-rgl.sphgrid(radius = 6051.8, radaxis = FALSE,deggap = 45, longtype = "D")
+rgl.sphgrid(radius = VenusR, radaxis = FALSE,deggap = 45, longtype = "D")
 # if you open in browser i.e. Google Chrome, you will see the plot
 rgl.sphpoints(long = coordinates) 
 
 ```
 
-5.
+4.
 
 a.
 
@@ -70,7 +70,7 @@ a.
 # @param b: bandwidth; default is 13000 for Venus elevation testing purposes
 # return: weighted mean of the elevations
 ######
-Spatial_Kernel_Smoother <- function(point, coordinates, R = 6051.8, kernel = "Gaussian", b = 13000){
+Spatial_Kernel_Smoother <- function(point, coordinates, R = VenusR, kernel = "Gaussian", b = 13000){
   
   no_elevation_coordinates <- coordinates[,1:2]
   distance <- vector()
@@ -187,14 +187,14 @@ nearest_neighbor <- vector()
 # calculates nearest neighbor through min function
 for (i in 1:nrow(coordinates)){
   
-  nearest_neighbor[i] <- min(dis(coordinates[i,], coordinates[-i,], r = 6051.8)) 
+  nearest_neighbor[i] <- min(dis(coordinates[i,], coordinates[-i,], r = VenusR)) 
                 
 }
 
 hist(nearest_neighbor, xlab = "Nearest Neighbor in (km)", main = "Histogram of Nearest Neighbor")
 ```
 
-6.
+5.
 
 a.
 
@@ -207,7 +207,7 @@ a.
 # @param Dm: vector of distances; default is the required vector in problem
 # returns: vector of Ripley's K function values
 ######
-K_function <- function(spatial_points, R, Dm = seq(1,100) * pi * 6051.8 / 100){
+K_function <- function(spatial_points, R, Dm = seq(1,100) * pi * VenusR / 100){
   # plyr parallelizes the respective matrix computations
   require(plyr)
   k_values <- vector()
@@ -248,9 +248,9 @@ b.
 longitude <- as.numeric(as.character(final_data$Lon))
 latitude <- as.numeric(as.character(final_data$Lat))
 coordinates <- cbind(longitude, latitude)
-Dm = seq(1,100) * pi * 6051.8 / 100
-Ripleys_K <- K_function(coordinates, 6051.8)
-CSR_K <- (2 * pi * 6051.8^2) * (1- cos(Dm / 6051.8))
+Dm = seq(1,100) * pi * VenusR / 100
+Ripleys_K <- K_function(coordinates, VenusR)
+CSR_K <- (2 * pi * VenusR^2) * (1- cos(Dm / VenusR))
 library("ggplot2")
   p1 <- ggplot() + geom_line(aes(Dm, Ripleys_K - CSR_K)) +
     labs(title = "Spherical K function estimates for\ncraters on Venus", 
@@ -259,7 +259,7 @@ library("ggplot2")
   print(p1)
 ```
 
-7.
+6.
 
 ```{r, warning = FALSE}
 ######
@@ -278,37 +278,32 @@ Uniform_Venus <- function(Ripleys_K, n = 100){
 
   # Generate Uniform Distributions
   for (i in 1:n){
-    R <- runif(942, min = -6051.8, max = 6051.8)
+    R <- runif(942, min = -VenusR, max = VenusR)
     lon <- runif(942, min = 0, max = 360)
-    lat <- asin(R / 6051.8) * 180 / pi
+    lat <- asin(R / VenusR) * 180 / pi
     coordinates <- data.frame(lon,lat)
-    Sample_K[,i] <- K_function(coordinates, 6051.8)  
+    Sample_K[,i] <- K_function(coordinates, VenusR)  
   }
   # Build dataframe
   bounds <- apply(Sample_K, MARGIN = 1,FUN = function(x) quantile(x, c(0.05,0.95)))
   lb <- bounds[1,]
   ub <- bounds[2,]
-  Dm = seq(1,100) * pi * 6051.8 / 100
-  CSR_K <- (2 * pi * 6051.8^2) * (1- cos(Dm / 6051.8))
-  # Plot lower and upper bounds for each dm
-  # plot(1:100, Ripleys_K - CSR_K, xlab = "1:100", main = "Ripleys_K - CSR_K for Elevation of Craters on Venus")
-  #for (i in 1:100){
-    #abline(h = lb[i] - CSR_K)
-    #abline(h = ub[i] - CSR_K)
+  Dm = seq(1,100) * pi * VenusR / 100
+  CSR_K <- (2 * pi * VenusR^2) * (1- cos(Dm / VenusR))
   
-  #}
+  # Plot lower and upper bounds for each dm
   p1 <- ggplot() + geom_line(aes(Dm, Ripleys_K - CSR_K)) +
     geom_ribbon(aes(x = Dm, ymin = lb - CSR_K, ymax = ub - CSR_K), alpha = 0.2) +
-    labs(title = "Spherical K function estimates for\ncraters on Venus", 
+    labs(title = "Spherical K function estimates for\nuniformly distributed predictions of craters on Venus", 
        x = "Great Circle Distances (km)", 
        y = "K - CSR")
   print(p1)
 }
 
-# For performance purposes, I used 5 to demonstrate the ability of the
+# For performance purposes, I used 10 to demonstrate the ability of the
 # function to plot the lb and ub for each dm.
 # Inputting 100 into n will allow for 100 samples
-Uniform_Venus(Ripleys_K, n = 5)
+Uniform_Venus(Ripleys_K, n = 10)
 ```
 
 I conclude that the craters on Venus are randomly distributed in a uniform distribution across Venus. The actual sample k values did not differ too far from the upper and lower bound. Also the uniformly simulated graph closely resembles the actual graph of data gathered from Venus. 
