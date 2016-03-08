@@ -4,17 +4,6 @@ author: "Andus Kong"
 date: "Friday, November 13, 2015"
 output: html_document
 ---
-
-1.
-
-a.
-
-Evaluating an expression has a set value that R internally represents. Expressions can be represented by a combo of explicit values, variables, operators, or functions. However, a function calls need to be invoked by name and takes in arguments which the function call then evaluates.
-
-b.
-
-The enclosing environment affects a function object because when a function call searches the assignment of the variable, but the variable is not defined in the function call, the function will search within the enclosing environment for the variable assignment.
-
 2.
 
 ```{r}
