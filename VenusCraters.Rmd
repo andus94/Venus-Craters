@@ -2,7 +2,7 @@
 title: "Venus Craters"
 author: "Andus Kong"
 date: "Friday, November 13, 2015"
-output: html_document
+output: pdf_document
 ---
 1.
 
